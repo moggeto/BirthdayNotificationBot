@@ -2,10 +2,10 @@ from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from app.database.session import Session
 from app.database.models import Birthday
-
+from app.keyboards.reply import main_menu
 
 async def start_command(message: types.Message):
-    await message.answer("Привет! Я бот для напоминаний о днях рождения.")
+    await message.answer("Привет! Я бот для напоминаний о днях рождения.", reply_markup=main_menu)
 
 
 async def add_birthday(message: types.Message):

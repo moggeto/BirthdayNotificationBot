@@ -1,6 +1,7 @@
 from aiogram import Dispatcher
 from app.handlers.crud import register_crud_handlers
 from app.handlers.notify import register_notify_handlers
+from app.handlers.buttons import register_text_handlers
 
 
 def register_handlers(dp: Dispatcher):
@@ -9,3 +10,4 @@ def register_handlers(dp: Dispatcher):
     """
     register_crud_handlers(dp)
     register_notify_handlers(dp)
+    register_text_handlers(dp)
