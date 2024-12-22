@@ -13,10 +13,11 @@ class Birthday(Base):
     __tablename__ = "birthdays"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False)
-    first_name = Column(String, nullable=False)  # Добавлено
-    last_name = Column(String, nullable=False)   # Добавлено
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
     day = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=True)
 
 class NotificationSetting(Base):
     __tablename__ = "notification_settings"
