@@ -5,7 +5,7 @@ main_menu = ReplyKeyboardMarkup(
         [
             KeyboardButton(text='Добавить день рождения'),
             KeyboardButton(text='Редактировать день рождения'),
-            KeyboardButton(text='Список дней рождений')],
+            KeyboardButton(text='Просмотр дней рождений')],
 
         [
             KeyboardButton(text='Настройки')
