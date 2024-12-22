@@ -1,6 +1,5 @@
-
 import asyncio
-from app.bot import bot, dp
+from bot import bot, dp
 from app.handlers import register_handlers
 from app.database.session import init_db
 
