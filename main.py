@@ -10,7 +10,6 @@ from config import NOTIFICATION_CHECK_HOUR, NOTIFICATION_CHECK_MINUTE
 from app.database.session import get_session
 from app.database.models import User
 from app.handlers import register_handlers
-from app.services.notifications import get_notification_days
 from app.services.sent_notifications import was_sent, mark_as_sent
 from app.services.reminders import (
     get_upcoming_birthdays_for_user,
@@ -32,48 +31,51 @@ async def send_scheduled_notifications():
         logging.info("Найдено пользователей: %s", len(users))
 
         for user in users:
-            birthdays = get_upcoming_birthdays_for_user(session, user, today=today)
+            birthdays_by_days = get_upcoming_birthdays_for_user(session, user, today=today)
 
+            total_found = sum(len(items) for items in birthdays_by_days.values())
             logging.info(
                 "Пользователь %s (%s), найдено подходящих ДР: %s",
                 user.id,
                 user.telegram_id,
-                len(birthdays),
+                total_found,
             )
 
-            if not birthdays:
-                continue
-
-            days_before = get_notification_days(session, user, default=1)
-
-            for birthday in birthdays:
-                if was_sent(session, user.id, birthday.id, today):
-                    logging.info(
-                        "Уведомление уже отправлялось сегодня. user_id=%s birthday_id=%s",
-                        user.id,
-                        birthday.id,
-                    )
+            for days_before, birthdays in birthdays_by_days.items():
+                if not birthdays:
                     continue
 
-                message_text = build_notification_message([birthday], days_before)
+                for birthday in birthdays:
+                    if was_sent(session, user.id, birthday.id, today, days_before):
+                        logging.info(
+                            "Уведомление уже отправлялось сегодня. user_id=%s birthday_id=%s days_before=%s",
+                            user.id,
+                            birthday.id,
+                            days_before,
+                        )
+                        continue
 
-                if not message_text:
-                    continue
+                    message_text = build_notification_message([birthday], days_before)
 
-                try:
-                    await bot.send_message(chat_id=user.telegram_id, text=message_text)
-                    mark_as_sent(session, user.id, birthday.id, today)
-                    logging.info(
-                        "Уведомление отправлено пользователю %s для birthday_id=%s",
-                        user.telegram_id,
-                        birthday.id,
-                    )
-                except Exception as e:
-                    logging.exception(
-                        "Не удалось отправить уведомление пользователю %s: %s",
-                        user.telegram_id,
-                        e,
-                    )
+                    if not message_text:
+                        continue
+
+                    try:
+                        await bot.send_message(chat_id=user.telegram_id, text=message_text)
+                        mark_as_sent(session, user.id, birthday.id, today, days_before)
+                        logging.info(
+                            "Уведомление отправлено пользователю %s для birthday_id=%s days_before=%s",
+                            user.telegram_id,
+                            birthday.id,
+                            days_before,
+                        )
+                    except Exception as e:
+                        logging.exception(
+                            "Не удалось отправить уведомление пользователю %s: %s",
+                            user.telegram_id,
+                            e,
+                        )
+
 
 def setup_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=TZ)
@@ -104,7 +106,6 @@ def setup_scheduler() -> AsyncIOScheduler:
 async def main():
     register_handlers(dp)
     scheduler = setup_scheduler()
-
 
     try:
         await dp.start_polling(bot)

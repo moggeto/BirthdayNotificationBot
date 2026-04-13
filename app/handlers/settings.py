@@ -7,7 +7,12 @@ from app.keyboards.reply import (
     settings_menu,
     notifications_settings_menu,
 )
-from app.services.notifications import get_notification_days, set_notification_days
+from app.services.notifications import (
+    get_notification_days_list,
+    add_notification_day,
+    remove_notification_day,
+    format_notification_days,
+)
 from app.services.users import get_or_create_user
 from app.states.settings_states import SettingsStates
 
@@ -27,13 +32,17 @@ async def open_notifications_settings(message: types.Message, state: FSMContext)
             telegram_id=message.from_user.id,
             name=message.from_user.full_name,
         )
-        notify_before = get_notification_days(session, user, default=1)
+        days_list = get_notification_days_list(session, user, default=[1])
 
     await state.set_state(SettingsStates.waiting_for_notification_days)
     await message.answer(
         "Настройки уведомлений.\n"
-        f"Сейчас: за {notify_before} дн. до дня рождения.\n\n"
-        "Введи новое количество дней.",
+        f"Сейчас: {format_notification_days(days_list)} дн. до дня рождения.\n\n"
+        "Введи число, чтобы ДОБАВИТЬ уведомление.\n"
+        "Введи число с минусом, чтобы УДАЛИТЬ уведомление.\n\n"
+        "Примеры:\n"
+        "7  -> добавить уведомление за 7 дней\n"
+        "-7 -> удалить уведомление за 7 дней",
         reply_markup=notifications_settings_menu,
     )
 
@@ -58,7 +67,7 @@ async def process_notification_days(message: types.Message, state: FSMContext):
         return
 
     try:
-        notify_before = int(text)
+        value = int(text)
 
         with get_session() as session:
             user = get_or_create_user(
@@ -66,16 +75,38 @@ async def process_notification_days(message: types.Message, state: FSMContext):
                 telegram_id=message.from_user.id,
                 name=message.from_user.full_name,
             )
-            set_notification_days(session, user, notify_before)
 
-        await state.clear()
+            if value > 0:
+                add_notification_day(session, user, value)
+                action_text = f"Добавлено уведомление за {value} дн."
+            elif value < 0:
+                days_to_remove = abs(value)
+                removed = remove_notification_day(session, user, days_to_remove)
+                if not removed:
+                    await message.answer(
+                        f"Уведомление за {days_to_remove} дн. не найдено.",
+                        reply_markup=notifications_settings_menu,
+                    )
+                    return
+                action_text = f"Удалено уведомление за {days_to_remove} дн."
+            else:
+                await message.answer("0 нельзя использовать. Введи число больше 0 или отрицательное для удаления.")
+                return
+
+            updated_days = get_notification_days_list(session, user, default=[])
+
         await message.answer(
-            f"Готово. Уведомление будет приходить за {notify_before} дн. до дня рождения.",
-            reply_markup=settings_menu,
+            f"{action_text}\n"
+            f"Теперь установлено: {format_notification_days(updated_days)} дн.",
+            reply_markup=notifications_settings_menu,
         )
 
-    except ValueError:
-        await message.answer("Введи целое положительное число. Например: 3")
+    except ValueError as e:
+        text_error = str(e)
+        if text_error:
+            await message.answer(text_error)
+        else:
+            await message.answer("Введи целое число. Например: 7 или -7")
 
 
 async def back_to_main_menu_from_settings(message: types.Message, state: FSMContext):

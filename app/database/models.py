@@ -20,10 +20,9 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    notification_setting = relationship(
+    notification_settings = relationship(
         "NotificationSetting",
         back_populates="user",
-        uselist=False,
         cascade="all, delete-orphan",
     )
 
@@ -58,16 +57,35 @@ class NotificationSetting(Base):
     __tablename__ = "notification_settings"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
-    notify_before = Column(Integer, nullable=False, default=1)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    days_before = Column(Integer, nullable=False)
 
-    user = relationship("User", back_populates="notification_setting")
+    user = relationship("User", back_populates="notification_settings")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "days_before",
+            name="uq_user_notification_day",
+        ),
+    )
 
 
 class SentNotification(Base):
     __tablename__ = "sent_notifications"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False)
-    birthday_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False, index=True)
+    birthday_id = Column(Integer, nullable=False, index=True)
     date_sent = Column(Date, nullable=False)
+    days_before = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "birthday_id",
+            "date_sent",
+            "days_before",
+            name="uq_sent_notification_once_per_day",
+        ),
+    )

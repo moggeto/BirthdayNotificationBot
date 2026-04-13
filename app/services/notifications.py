@@ -1,30 +1,59 @@
 from app.database.models import NotificationSetting, User
 
 
-def set_notification_days(session, user: User, notify_before: int) -> NotificationSetting:
-    if notify_before <= 0:
+def get_notification_settings(session, user: User) -> list[NotificationSetting]:
+    return (
+        session.query(NotificationSetting)
+        .filter_by(user_id=user.id)
+        .order_by(NotificationSetting.days_before.desc())
+        .all()
+    )
+
+
+def get_notification_days_list(session, user: User, default: list[int] | None = None) -> list[int]:
+    settings = get_notification_settings(session, user)
+
+    if settings:
+        return [setting.days_before for setting in settings]
+
+    return default if default is not None else [1]
+
+
+def add_notification_day(session, user: User, days_before: int) -> NotificationSetting:
+    if days_before <= 0:
         raise ValueError("Количество дней должно быть больше 0.")
 
-    setting = session.query(NotificationSetting).filter_by(user_id=user.id).first()
+    existing = (
+        session.query(NotificationSetting)
+        .filter_by(user_id=user.id, days_before=days_before)
+        .first()
+    )
+    if existing:
+        raise ValueError("Такое уведомление уже существует.")
 
-    if setting:
-        setting.notify_before = notify_before
-        return setting
-
-    setting = NotificationSetting(user_id=user.id, notify_before=notify_before)
+    setting = NotificationSetting(user_id=user.id, days_before=days_before)
     session.add(setting)
     session.flush()
     return setting
 
 
-def get_notification_setting(session, user: User) -> NotificationSetting | None:
-    return session.query(NotificationSetting).filter_by(user_id=user.id).first()
+def remove_notification_day(session, user: User, days_before: int) -> bool:
+    setting = (
+        session.query(NotificationSetting)
+        .filter_by(user_id=user.id, days_before=days_before)
+        .first()
+    )
+
+    if not setting:
+        return False
+
+    session.delete(setting)
+    session.flush()
+    return True
 
 
-def get_notification_days(session, user: User, default: int = 1) -> int:
-    setting = get_notification_setting(session, user)
-    return setting.notify_before if setting else default
+def format_notification_days(days_list: list[int]) -> str:
+    if not days_list:
+        return "нет"
 
-
-def get_all_notification_settings(session) -> list[NotificationSetting]:
-    return session.query(NotificationSetting).all()
+    return ", ".join(str(day) for day in sorted(days_list, reverse=True))
