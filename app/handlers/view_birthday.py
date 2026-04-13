@@ -14,6 +14,16 @@ async def fetch_birthdays(telegram_id: int, full_name: str, sort_by: str = "name
         return get_user_birthdays(session, user, sort_by)
 
 
+def format_birthday_for_list(birthday) -> str:
+    full_name = f"{birthday.first_name} {birthday.last_name}".strip()
+    line = f"- {full_name}: {birthday.day:02}.{birthday.month:02}"
+    if birthday.year:
+        line += f".{birthday.year}"
+    if birthday.description:
+        line += f"\n  Описание: {birthday.description}"
+    return line
+
+
 async def send_paginated_list(
     bot: Bot,
     chat_id: int,
@@ -27,11 +37,7 @@ async def send_paginated_list(
     items = birthdays[start:end]
 
     response = "Список дней рождений:\n"
-    response += "\n".join(
-        f"- {birthday.first_name} {birthday.last_name}".rstrip() + f": {birthday.day:02}.{birthday.month:02}"
-        + (f".{birthday.year}" if birthday.year else "")
-        for birthday in items
-    )
+    response += "\n".join(format_birthday_for_list(birthday) for birthday in items)
 
     keyboard = get_pagination_keyboard(page, total_pages, sort_by)
     await bot.send_message(chat_id, response, reply_markup=keyboard)

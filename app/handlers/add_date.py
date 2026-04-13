@@ -10,8 +10,6 @@ from app.states.birthday_states import BirthdayStates
 from app.services.validators import validate_day_month
 
 
-
-
 async def start_adding_birthday(message: types.Message, state: FSMContext):
     await message.answer("Пожалуйста, введите имя и фамилию:", reply_markup=cancel_menu)
     await state.set_state(BirthdayStates.waiting_for_name)
@@ -25,8 +23,6 @@ async def process_name(message: types.Message, state: FSMContext):
     if not message.text or not message.text.strip():
         await message.answer("Имя не может быть пустым. Введите имя ещё раз.")
         return
-
-
 
     await state.update_data(name=message.text.strip())
     await message.answer("Теперь введите дату рождения в формате ДД.ММ:", reply_markup=cancel_menu)
@@ -70,14 +66,35 @@ async def process_year(message: types.Message, state: FSMContext):
     else:
         await state.update_data(year=None)
 
+    await message.answer(
+        "Теперь введите описание или заметку (опционально).\n"
+        "Например: что любит, идеи для подарка и т.д.\n"
+        "Если не нужно — отправьте '-'",
+        reply_markup=cancel_menu,
+    )
+    await state.set_state(BirthdayStates.waiting_for_description)
+
+
+async def process_description(message: types.Message, state: FSMContext):
+    if message.text == "Назад":
+        await cancel_operation(message, state)
+        return
+
+    text = (message.text or "").strip()
+    description = "" if text == "-" else text
+
+    await state.update_data(description=description)
+
     data = await state.get_data()
     year_info = data["year"] if data.get("year") else "не указан"
+    description_info = data["description"] if data.get("description") else "не указано"
 
     await message.answer(
         f"Проверьте данные:\n"
         f"Имя и фамилия: {data['name']}\n"
         f"Дата рождения: {data['day']:02}.{data['month']:02}\n"
-        f"Год рождения: {year_info}",
+        f"Год рождения: {year_info}\n"
+        f"Описание: {description_info}",
         reply_markup=confirm_menu,
     )
     await state.set_state(BirthdayStates.confirmation)
@@ -109,6 +126,7 @@ async def confirm_birthday(message: types.Message, state: FSMContext):
                 day=data["day"],
                 month=data["month"],
                 year=data.get("year"),
+                description=data.get("description", ""),
             )
 
         full_name = f"{birthday.first_name} {birthday.last_name}".strip()
@@ -136,4 +154,5 @@ def register_add_handlers(dp: Dispatcher):
     dp.message.register(process_name, BirthdayStates.waiting_for_name)
     dp.message.register(process_date, BirthdayStates.waiting_for_date)
     dp.message.register(process_year, BirthdayStates.waiting_for_year)
+    dp.message.register(process_description, BirthdayStates.waiting_for_description)
     dp.message.register(confirm_birthday, BirthdayStates.confirmation)

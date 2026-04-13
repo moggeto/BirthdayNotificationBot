@@ -18,6 +18,7 @@ from app.services.birthday_management import (
     update_birthday_name,
     update_birthday_date,
     update_birthday_year,
+    update_birthday_description,
 )
 from app.services.users import get_or_create_user
 from app.states.edit_birthday_states import EditBirthdayStates
@@ -29,6 +30,8 @@ def format_birthday_line(birthday) -> str:
     text = f"{full_name} — {birthday.day:02}.{birthday.month:02}"
     if birthday.year:
         text += f".{birthday.year}"
+    if birthday.description:
+        text += f"\nОписание: {birthday.description}"
     return text
 
 
@@ -181,6 +184,24 @@ async def start_edit_year(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+async def start_edit_description(callback: CallbackQuery, state: FSMContext):
+    try:
+        birthday_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError):
+        await callback.answer("Некорректный запрос.")
+        return
+
+    await state.update_data(edit_birthday_id=birthday_id)
+    await state.set_state(EditBirthdayStates.waiting_for_new_description)
+
+    await callback.message.answer(
+        "Введи новое описание.\n"
+        "Если хочешь очистить описание, отправь '-'",
+        reply_markup=cancel_menu,
+    )
+    await callback.answer()
+
+
 async def process_new_name(message: types.Message, state: FSMContext):
     if message.text == "Назад":
         await state.clear()
@@ -239,7 +260,6 @@ async def process_new_date(message: types.Message, state: FSMContext):
 
     try:
         day, month = map(int, message.text.split("."))
-
         validate_day_month(day, month)
 
         with get_session() as session:
@@ -261,8 +281,8 @@ async def process_new_date(message: types.Message, state: FSMContext):
         )
         await state.clear()
 
-    except ValueError:
-        await message.answer("Неверный формат даты. Введи дату в формате ДД.ММ.")
+    except ValueError as e:
+        await message.answer(str(e))
     except IntegrityError:
         await message.answer("Такая запись уже существует.")
 
@@ -305,10 +325,52 @@ async def process_new_year(message: types.Message, state: FSMContext):
         )
         await state.clear()
 
-    except ValueError:
-        await message.answer("Введи корректный год или '-' чтобы убрать его.")
+    except ValueError as e:
+        await message.answer(str(e))
     except IntegrityError:
         await message.answer("Такая запись уже существует.")
+
+
+async def process_new_description(message: types.Message, state: FSMContext):
+    if message.text == "Назад":
+        await state.clear()
+        await message.answer("Изменение отменено.", reply_markup=main_menu)
+        return
+
+    data = await state.get_data()
+    birthday_id = data.get("edit_birthday_id")
+
+    if not birthday_id:
+        await state.clear()
+        await message.answer("Не удалось определить запись.", reply_markup=main_menu)
+        return
+
+    text = (message.text or "").strip()
+    description = "" if text == "-" else text
+
+    try:
+        with get_session() as session:
+            user = get_or_create_user(
+                session=session,
+                telegram_id=message.from_user.id,
+                name=message.from_user.full_name,
+            )
+            birthday = update_birthday_description(session, user, birthday_id, description)
+
+        if not birthday:
+            await message.answer("Запись не найдена.", reply_markup=main_menu)
+            await state.clear()
+            return
+
+        await message.answer(
+            f"Описание обновлено:\n{format_birthday_line(birthday)}",
+            reply_markup=main_menu,
+        )
+        await state.clear()
+
+    except Exception as e:
+        await message.answer(f"Ошибка при обновлении описания: {e}")
+
 
 async def confirm_delete_birthday(callback: CallbackQuery):
     try:
@@ -395,9 +457,14 @@ def register_edit_handlers(dp: Dispatcher):
         start_edit_year,
         lambda c: c.data.startswith("edit_birthday_field_year:"),
     )
+    dp.callback_query.register(
+        start_edit_description,
+        lambda c: c.data.startswith("edit_birthday_field_description:"),
+    )
     dp.message.register(process_new_name, EditBirthdayStates.waiting_for_new_name)
     dp.message.register(process_new_date, EditBirthdayStates.waiting_for_new_date)
     dp.message.register(process_new_year, EditBirthdayStates.waiting_for_new_year)
+    dp.message.register(process_new_description, EditBirthdayStates.waiting_for_new_description)
     dp.callback_query.register(
         confirm_delete_birthday,
         lambda c: c.data.startswith("edit_birthday_confirm_delete:"),

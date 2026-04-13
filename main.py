@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from bot import bot, dp
 from config import NOTIFICATION_CHECK_HOUR, NOTIFICATION_CHECK_MINUTE
-from app.database.session import get_session, init_db
+from app.database.session import get_session
 from app.database.models import User
 from app.handlers import register_handlers
 from app.services.notifications import get_notification_days

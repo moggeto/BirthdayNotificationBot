@@ -88,9 +88,6 @@ def update_birthday_name(session, user: User, birthday_id: int, full_name: str) 
 
 
 def update_birthday_date(session, user: User, birthday_id: int, day: int, month: int) -> Birthday | None:
-    if not (1 <= day <= 31 and 1 <= month <= 12):
-        raise ValueError("Неверная дата.")
-
     birthday = get_birthday_by_id_for_user(session, user, birthday_id)
     if not birthday:
         return None
@@ -121,5 +118,15 @@ def update_birthday_year(session, user: User, birthday_id: int, year: int | None
         return None
 
     birthday.year = year
+    session.flush()
+    return birthday
+
+
+def update_birthday_description(session, user: User, birthday_id: int, description: str) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    birthday.description = description.strip()
     session.flush()
     return birthday

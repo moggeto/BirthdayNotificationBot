@@ -73,6 +73,12 @@ def get_edit_fields_keyboard(birthday_id: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="Изменить описание",
+                    callback_data=f"edit_birthday_field_description:{birthday_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="Назад",
                     callback_data=f"edit_birthday_back_to_actions:{birthday_id}",
                 )

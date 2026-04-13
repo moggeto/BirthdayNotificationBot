@@ -38,6 +38,7 @@ class Birthday(Base):
     day = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=True)
+    description = Column(String, nullable=False, default="")
 
     user = relationship("User", back_populates="birthdays")
 
@@ -61,6 +62,7 @@ class NotificationSetting(Base):
     notify_before = Column(Integer, nullable=False, default=1)
 
     user = relationship("User", back_populates="notification_setting")
+
 
 class SentNotification(Base):
     __tablename__ = "sent_notifications"

@@ -40,6 +40,7 @@ def create_birthday(
     day: int,
     month: int,
     year: int | None = None,
+    description: str = "",
 ) -> Birthday:
     first_name, last_name = split_name(full_name)
 
@@ -61,6 +62,7 @@ def create_birthday(
         day=day,
         month=month,
         year=year,
+        description=description.strip(),
     )
     session.add(birthday)
     session.flush()
