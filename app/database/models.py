@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import Date
 
 
@@ -39,6 +40,17 @@ class Birthday(Base):
     year = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="birthdays")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "first_name",
+            "last_name",
+            "day",
+            "month",
+            name="uq_user_birthday",
+        ),
+    )
 
 
 class NotificationSetting(Base):

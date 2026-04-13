@@ -102,12 +102,9 @@ def setup_scheduler() -> AsyncIOScheduler:
 
 
 async def main():
-    init_db()
     register_handlers(dp)
     scheduler = setup_scheduler()
 
-    # Временно оставь это для проверки
-    await send_scheduled_notifications()
 
     try:
         await dp.start_polling(bot)

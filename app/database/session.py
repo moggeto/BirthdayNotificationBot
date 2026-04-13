@@ -11,9 +11,6 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
-def init_db():
-    Base.metadata.create_all(engine)
-
 
 @contextmanager
 def get_session():

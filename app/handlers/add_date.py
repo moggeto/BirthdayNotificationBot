@@ -1,11 +1,15 @@
 from aiogram import types, Dispatcher
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.exc import IntegrityError
 
 from app.database.session import get_session
 from app.keyboards.reply import main_menu, confirm_menu, cancel_menu
 from app.services.birthdays import create_birthday
 from app.services.users import get_or_create_user
 from app.states.birthday_states import BirthdayStates
+from app.services.validators import validate_day_month
+
+
 
 
 async def start_adding_birthday(message: types.Message, state: FSMContext):
@@ -22,6 +26,8 @@ async def process_name(message: types.Message, state: FSMContext):
         await message.answer("Имя не может быть пустым. Введите имя ещё раз.")
         return
 
+
+
     await state.update_data(name=message.text.strip())
     await message.answer("Теперь введите дату рождения в формате ДД.ММ:", reply_markup=cancel_menu)
     await state.set_state(BirthdayStates.waiting_for_date)
@@ -35,8 +41,7 @@ async def process_date(message: types.Message, state: FSMContext):
     try:
         day, month = map(int, message.text.split("."))
 
-        if not (1 <= day <= 31 and 1 <= month <= 12):
-            raise ValueError
+        validate_day_month(day, month)
 
         await state.update_data(day=day, month=month)
         await message.answer(
@@ -115,6 +120,8 @@ async def confirm_birthday(message: types.Message, state: FSMContext):
 
     except ValueError as e:
         await message.answer(str(e))
+    except IntegrityError:
+        await message.answer("Такая запись уже существует.")
     except Exception as e:
         await message.answer(f"Ошибка при добавлении: {e}")
 

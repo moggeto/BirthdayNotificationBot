@@ -19,7 +19,6 @@ def find_duplicate_birthday(
     last_name: str,
     day: int,
     month: int,
-    year: int | None,
 ) -> Birthday | None:
     return (
         session.query(Birthday)
@@ -29,7 +28,6 @@ def find_duplicate_birthday(
             last_name=last_name,
             day=day,
             month=month,
-            year=year,
         )
         .first()
     )
@@ -52,7 +50,6 @@ def create_birthday(
         last_name=last_name,
         day=day,
         month=month,
-        year=year,
     )
     if duplicate:
         raise ValueError("Такая запись уже существует.")

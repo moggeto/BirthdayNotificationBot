@@ -1,6 +1,7 @@
 from aiogram import Dispatcher, types
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.exc import IntegrityError
 
 from app.database.session import get_session
 from app.keyboards.edit_inline import (
@@ -20,6 +21,7 @@ from app.services.birthday_management import (
 )
 from app.services.users import get_or_create_user
 from app.states.edit_birthday_states import EditBirthdayStates
+from app.services.validators import validate_day_month
 
 
 def format_birthday_line(birthday) -> str:
@@ -215,6 +217,8 @@ async def process_new_name(message: types.Message, state: FSMContext):
 
     except ValueError as e:
         await message.answer(str(e))
+    except IntegrityError:
+        await message.answer("Такая запись уже существует.")
     except Exception as e:
         await message.answer(f"Ошибка при обновлении имени: {e}")
 
@@ -235,6 +239,8 @@ async def process_new_date(message: types.Message, state: FSMContext):
 
     try:
         day, month = map(int, message.text.split("."))
+
+        validate_day_month(day, month)
 
         with get_session() as session:
             user = get_or_create_user(
@@ -257,6 +263,8 @@ async def process_new_date(message: types.Message, state: FSMContext):
 
     except ValueError:
         await message.answer("Неверный формат даты. Введи дату в формате ДД.ММ.")
+    except IntegrityError:
+        await message.answer("Такая запись уже существует.")
 
 
 async def process_new_year(message: types.Message, state: FSMContext):
@@ -299,7 +307,8 @@ async def process_new_year(message: types.Message, state: FSMContext):
 
     except ValueError:
         await message.answer("Введи корректный год или '-' чтобы убрать его.")
-
+    except IntegrityError:
+        await message.answer("Такая запись уже существует.")
 
 async def confirm_delete_birthday(callback: CallbackQuery):
     try:

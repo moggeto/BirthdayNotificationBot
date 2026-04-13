@@ -37,7 +37,6 @@ def has_duplicate_except_self(
     last_name: str,
     day: int,
     month: int,
-    year: int | None,
 ) -> bool:
     duplicate = (
         session.query(Birthday)
@@ -47,7 +46,6 @@ def has_duplicate_except_self(
             Birthday.last_name == last_name,
             Birthday.day == day,
             Birthday.month == month,
-            Birthday.year == year,
             Birthday.id != birthday_id,
         )
         .first()
@@ -80,7 +78,6 @@ def update_birthday_name(session, user: User, birthday_id: int, full_name: str) 
         last_name=last_name,
         day=birthday.day,
         month=birthday.month,
-        year=birthday.year,
     ):
         raise ValueError("Такая запись уже существует.")
 
@@ -106,7 +103,6 @@ def update_birthday_date(session, user: User, birthday_id: int, day: int, month:
         last_name=birthday.last_name,
         day=day,
         month=month,
-        year=birthday.year,
     ):
         raise ValueError("Такая запись уже существует.")
 
@@ -123,18 +119,6 @@ def update_birthday_year(session, user: User, birthday_id: int, year: int | None
     birthday = get_birthday_by_id_for_user(session, user, birthday_id)
     if not birthday:
         return None
-
-    if has_duplicate_except_self(
-        session=session,
-        user=user,
-        birthday_id=birthday.id,
-        first_name=birthday.first_name,
-        last_name=birthday.last_name,
-        day=birthday.day,
-        month=birthday.month,
-        year=year,
-    ):
-        raise ValueError("Такая запись уже существует.")
 
     birthday.year = year
     session.flush()
