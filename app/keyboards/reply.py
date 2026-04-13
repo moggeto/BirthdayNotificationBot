@@ -1,30 +1,43 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
-        [
-            KeyboardButton(text='Добавить день рождения'),
-            KeyboardButton(text='Редактировать день рождения'),
-            KeyboardButton(text='Просмотр дней рождений')],
-
-        [
-            KeyboardButton(text='Настройки')
-        ]
-
+        [KeyboardButton(text="Добавить день рождения")],
+        [KeyboardButton(text="Просмотр дней рождений")],
+        [KeyboardButton(text="Редактировать день рождения")],
+        [KeyboardButton(text="Настройки")],
     ],
-    resize_keyboard=True
+    resize_keyboard=True,
 )
 
 confirm_menu = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Подтвердить"), KeyboardButton(text="Назад")]
-    ], resize_keyboard=True
+        [KeyboardButton(text="Подтвердить")],
+        [KeyboardButton(text="Назад")],
+    ],
+    resize_keyboard=True,
 )
 
 cancel_menu = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Назад")]
-    ], resize_keyboard=True
+        [KeyboardButton(text="Назад")],
+    ],
+    resize_keyboard=True,
 )
 
+settings_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Уведомления")],
+        [KeyboardButton(text="В главное меню")],
+    ],
+    resize_keyboard=True,
+)
 
+notifications_settings_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Назад")],
+        [KeyboardButton(text="В главное меню")],
+    ],
+    resize_keyboard=True,
+)
