@@ -16,8 +16,8 @@ from app.services.birthday_management import (
     get_birthday_by_id_for_user,
     delete_birthday_by_id,
     update_birthday_name,
-    update_birthday_date,
-    update_birthday_year,
+    update_gregorian_date,
+    update_gregorian_year,
     update_birthday_description,
 )
 from app.services.users import get_or_create_user
@@ -276,7 +276,7 @@ async def process_new_date(message: types.Message, state: FSMContext):
                 telegram_id=message.from_user.id,
                 name=message.from_user.full_name,
             )
-            birthday = update_birthday_date(session, user, birthday_id, day, month)
+            birthday = update_gregorian_date(session, user, birthday_id, day, month)
             display_format = user.date_display_format
 
         if not birthday:
@@ -321,7 +321,7 @@ async def process_new_year(message: types.Message, state: FSMContext):
                 telegram_id=message.from_user.id,
                 name=message.from_user.full_name,
             )
-            birthday = update_birthday_year(session, user, birthday_id, year)
+            birthday = update_gregorian_year(session, user, birthday_id, year)
             display_format = user.date_display_format
 
         if not birthday:

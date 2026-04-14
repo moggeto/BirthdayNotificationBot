@@ -1,80 +1,22 @@
 from sqlalchemy.orm import selectinload
 
-from app.database.models import Birthday, BirthdayDate, CalendarType, User
-from app.services.hebrew_dates import convert_gregorian_to_hebrew
-
-
-def split_name(full_name: str) -> tuple[str, str]:
-    cleaned = (full_name or "").strip()
-    if not cleaned:
-        raise ValueError("Имя не может быть пустым.")
-
-    parts = cleaned.split(maxsplit=1)
-    first_name = parts[0]
-    last_name = parts[1] if len(parts) > 1 else ""
-    return first_name, last_name
-
-
-def get_gregorian_date(birthday: Birthday) -> BirthdayDate | None:
-    for item in birthday.dates:
-        if item.calendar_type == CalendarType.gregorian:
-            return item
-    return None
-
-
-def get_hebrew_date(birthday: Birthday) -> BirthdayDate | None:
-    for item in birthday.dates:
-        if item.calendar_type == CalendarType.hebrew:
-            return item
-    return None
-
-
-def sync_hebrew_date(session, birthday: Birthday):
-    """
-    Главная функция:
-    - если есть год → пересчитать Hebrew
-    - если нет года → удалить Hebrew
-    """
-
-    gregorian = get_gregorian_date(birthday)
-    hebrew = get_hebrew_date(birthday)
-
-    if not gregorian:
-        return
-
-    # если года нет → удаляем Hebrew
-    if not gregorian.g_year:
-        if hebrew:
-            session.delete(hebrew)
-            session.flush()
-        return
-
-    # если год есть → пересчитываем
-    result = convert_gregorian_to_hebrew(
-        day=gregorian.g_day,
-        month=gregorian.g_month,
-        year=gregorian.g_year,
-    )
-
-    if hebrew:
-        # обновляем существующую
-        hebrew.h_day = result.day
-        hebrew.h_month = result.month
-        hebrew.h_year = result.year
-        hebrew.adar_rule = result.adar_rule
-    else:
-        # создаём новую
-        hebrew = BirthdayDate(
-            birthday_id=birthday.id,
-            calendar_type=CalendarType.hebrew,
-            h_day=result.day,
-            h_month=result.month,
-            h_year=result.year,
-            adar_rule=result.adar_rule,
-        )
-        session.add(hebrew)
-
-    session.flush()
+from app.database.models import (
+    Birthday,
+    BirthdayDate,
+    CalendarType,
+    NotificationCalendarMode,
+    User,
+    HebrewMonth,
+    AdarRule,
+)
+from app.services.birthdays import (
+    split_name,
+    get_date_by_type,
+    add_gregorian_date_to_birthday,
+    add_hebrew_date_to_birthday,
+    sync_derived_hebrew_from_gregorian,
+)
+from app.services.hebrew_dates import validate_hebrew_date
 
 
 def get_birthdays_for_management(session, user: User) -> list[Birthday]:
@@ -86,7 +28,7 @@ def get_birthdays_for_management(session, user: User) -> list[Birthday]:
     )
 
     def sort_key(item: Birthday):
-        gregorian = get_gregorian_date(item)
+        gregorian = get_date_by_type(item, CalendarType.gregorian)
         month = gregorian.g_month if gregorian and gregorian.g_month else 99
         day = gregorian.g_day if gregorian and gregorian.g_day else 99
         return (
@@ -138,6 +80,44 @@ def delete_birthday_by_id(session, user: User, birthday_id: int) -> Birthday | N
     return birthday
 
 
+def delete_birthday_date(
+    session,
+    user: User,
+    birthday_id: int,
+    calendar_type: CalendarType,
+) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    date_item = get_date_by_type(birthday, calendar_type)
+    if not date_item:
+        raise ValueError("Дата этого типа не найдена.")
+
+    session.delete(date_item)
+    session.flush()
+
+    refreshed = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not refreshed:
+        return None
+
+    if not refreshed.dates:
+        session.delete(refreshed)
+        session.flush()
+        return None
+
+    if refreshed.notification_calendar_mode == NotificationCalendarMode.both and len(refreshed.dates) == 1:
+        remaining = refreshed.dates[0]
+        refreshed.notification_calendar_mode = remaining.calendar_type.value
+
+    elif refreshed.notification_calendar_mode == calendar_type.value:
+        remaining = refreshed.dates[0]
+        refreshed.notification_calendar_mode = remaining.calendar_type.value
+
+    session.flush()
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
 def update_birthday_name(session, user: User, birthday_id: int, full_name: str) -> Birthday | None:
     birthday = get_birthday_by_id_for_user(session, user, birthday_id)
     if not birthday:
@@ -157,49 +137,6 @@ def update_birthday_name(session, user: User, birthday_id: int, full_name: str) 
     birthday.first_name = first_name
     birthday.last_name = last_name
     session.flush()
-    session.refresh(birthday)
-    return get_birthday_by_id_for_user(session, user, birthday_id)
-
-
-def update_birthday_date(session, user: User, birthday_id: int, day: int, month: int) -> Birthday | None:
-    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
-    if not birthday:
-        return None
-
-    gregorian = get_gregorian_date(birthday)
-    if not gregorian:
-        raise ValueError("Нет григорианской даты.")
-
-    gregorian.g_day = day
-    gregorian.g_month = month
-
-    session.flush()
-
-    # ВАЖНО
-    sync_hebrew_date(session, birthday)
-
-    return get_birthday_by_id_for_user(session, user, birthday_id)
-
-
-def update_birthday_year(session, user: User, birthday_id: int, year: int | None) -> Birthday | None:
-    if year is not None and year <= 0:
-        raise ValueError("Год должен быть положительным.")
-
-    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
-    if not birthday:
-        return None
-
-    gregorian = get_gregorian_date(birthday)
-    if not gregorian:
-        raise ValueError("Нет григорианской даты.")
-
-    gregorian.g_year = year
-
-    session.flush()
-
-    # ВАЖНО
-    sync_hebrew_date(session, birthday)
-
     return get_birthday_by_id_for_user(session, user, birthday_id)
 
 
@@ -209,5 +146,162 @@ def update_birthday_description(session, user: User, birthday_id: int, descripti
         return None
 
     birthday.description = (description or "").strip()
+    session.flush()
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
+def update_notification_calendar_mode(
+    session,
+    user: User,
+    birthday_id: int,
+    mode: NotificationCalendarMode,
+) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    has_gregorian = get_date_by_type(birthday, CalendarType.gregorian) is not None
+    has_hebrew = get_date_by_type(birthday, CalendarType.hebrew) is not None
+
+    if mode == NotificationCalendarMode.gregorian and not has_gregorian:
+        raise ValueError("Нельзя выбрать григорианские уведомления: такой даты нет.")
+
+    if mode == NotificationCalendarMode.hebrew and not has_hebrew:
+        raise ValueError("Нельзя выбрать еврейские уведомления: такой даты нет.")
+
+    if mode == NotificationCalendarMode.both and not (has_gregorian and has_hebrew):
+        raise ValueError("Режим both доступен только когда у записи есть обе даты.")
+
+    birthday.notification_calendar_mode = mode
+    session.flush()
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
+def add_gregorian_date(
+    session,
+    user: User,
+    birthday_id: int,
+    day: int,
+    month: int,
+    year: int | None,
+    *,
+    auto_create_hebrew_if_possible: bool = False,
+) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    add_gregorian_date_to_birthday(session, birthday, day, month, year)
+
+    if auto_create_hebrew_if_possible and year is not None and not get_date_by_type(birthday, CalendarType.hebrew):
+        sync_derived_hebrew_from_gregorian(session, birthday)
+
+    session.flush()
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
+def add_hebrew_date(
+    session,
+    user: User,
+    birthday_id: int,
+    day: int,
+    month: HebrewMonth,
+    year: int | None,
+    *,
+    adar_rule: AdarRule = AdarRule.regular_to_adar_ii,
+    is_derived: bool = False,
+) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    validate_hebrew_date(day, month, year)
+    add_hebrew_date_to_birthday(
+        session=session,
+        birthday=birthday,
+        day=day,
+        month=month,
+        year=year,
+        adar_rule=adar_rule,
+        is_derived=is_derived,
+    )
+
+    session.flush()
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
+def update_gregorian_date(
+    session,
+    user: User,
+    birthday_id: int,
+    day: int,
+    month: int,
+) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    gregorian = get_date_by_type(birthday, CalendarType.gregorian)
+    if not gregorian:
+        raise ValueError("У записи нет григорианской даты.")
+
+    gregorian.g_day = day
+    gregorian.g_month = month
+    session.flush()
+
+    sync_derived_hebrew_from_gregorian(session, birthday)
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
+def update_gregorian_year(
+    session,
+    user: User,
+    birthday_id: int,
+    year: int | None,
+) -> Birthday | None:
+    if year is not None and year <= 0:
+        raise ValueError("Год должен быть положительным.")
+
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    gregorian = get_date_by_type(birthday, CalendarType.gregorian)
+    if not gregorian:
+        raise ValueError("У записи нет григорианской даты.")
+
+    gregorian.g_year = year
+    session.flush()
+
+    sync_derived_hebrew_from_gregorian(session, birthday)
+    return get_birthday_by_id_for_user(session, user, birthday_id)
+
+
+def update_hebrew_date(
+    session,
+    user: User,
+    birthday_id: int,
+    day: int,
+    month: HebrewMonth,
+    year: int | None,
+    *,
+    adar_rule: AdarRule = AdarRule.regular_to_adar_ii,
+) -> Birthday | None:
+    birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+    if not birthday:
+        return None
+
+    hebrew = get_date_by_type(birthday, CalendarType.hebrew)
+    if not hebrew:
+        raise ValueError("У записи нет еврейской даты.")
+
+    validate_hebrew_date(day, month, year)
+
+    hebrew.h_day = day
+    hebrew.h_month = month
+    hebrew.h_year = year
+    hebrew.adar_rule = adar_rule
+    hebrew.is_derived = False
+
     session.flush()
     return get_birthday_by_id_for_user(session, user, birthday_id)

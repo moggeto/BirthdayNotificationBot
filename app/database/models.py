@@ -1,6 +1,15 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Enum, UniqueConstraint, Date
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    ForeignKey,
+    Enum,
+    UniqueConstraint,
+    Date,
+    Boolean,
+)
 from sqlalchemy.orm import declarative_base, relationship
 
 
@@ -40,6 +49,12 @@ class DateDisplayFormat(str, enum.Enum):
     both = "both"
 
 
+class NotificationCalendarMode(str, enum.Enum):
+    gregorian = "gregorian"
+    hebrew = "hebrew"
+    both = "both"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -66,6 +81,12 @@ class Birthday(Base):
     last_name = Column(String, nullable=False, default="")
     description = Column(String, nullable=False, default="")
 
+    notification_calendar_mode = Column(
+        Enum(NotificationCalendarMode),
+        nullable=False,
+        default=NotificationCalendarMode.gregorian,
+    )
+
     user = relationship("User", back_populates="birthdays")
     dates = relationship("BirthdayDate", back_populates="birthday", cascade="all, delete-orphan")
 
@@ -81,6 +102,7 @@ class BirthdayDate(Base):
     birthday_id = Column(Integer, ForeignKey("birthdays.id"), nullable=False)
 
     calendar_type = Column(Enum(CalendarType), nullable=False)
+    is_derived = Column(Boolean, nullable=False, default=False)
 
     # Gregorian
     g_day = Column(Integer, nullable=True)
@@ -91,6 +113,7 @@ class BirthdayDate(Base):
     h_day = Column(Integer, nullable=True)
     h_month = Column(Enum(HebrewMonth), nullable=True)
     h_year = Column(Integer, nullable=True)
+
     adar_rule = Column(
         Enum(AdarRule),
         nullable=True,

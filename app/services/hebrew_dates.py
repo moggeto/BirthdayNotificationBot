@@ -48,27 +48,55 @@ ENUM_TO_PYLUACH_MONTH = {
 }
 
 
+def is_hebrew_leap_year(year: int) -> bool:
+    return year % 19 in {0, 3, 6, 8, 11, 14, 17}
+
+
 def map_pyluach_month_to_enum(month_number: int, year: int) -> HebrewMonth:
-    """
-    В pyluach месяцы нумеруются по еврейскому календарю.
-    В невисокосный год 12 = Adar.
-    В високосный год 12 = Adar I, 13 = Adar II.
-    """
     if month_number == 12:
-        if is_hebrew_leap_year(year):
-            return HebrewMonth.adar_i
-        return HebrewMonth.adar
+        return HebrewMonth.adar_i if is_hebrew_leap_year(year) else HebrewMonth.adar
 
     mapped = PYLUACH_MONTH_TO_ENUM.get(month_number)
     if mapped is None:
         raise ValueError(f"Неизвестный номер еврейского месяца: {month_number}")
-
     return mapped
 
 
-def is_hebrew_leap_year(year: int) -> bool:
-    # 7 високосных лет в 19-летнем цикле: 3, 6, 8, 11, 14, 17, 19
-    return year % 19 in {0, 3, 6, 8, 11, 14, 17}
+def map_enum_month_to_pyluach(month: HebrewMonth, year: int) -> int:
+    if month == HebrewMonth.adar:
+        return 12
+
+    if month == HebrewMonth.adar_i:
+        if not is_hebrew_leap_year(year):
+            raise ValueError("Adar I существует только в високосном еврейском году.")
+        return 12
+
+    if month == HebrewMonth.adar_ii:
+        if not is_hebrew_leap_year(year):
+            raise ValueError("Adar II существует только в високосном еврейском году.")
+        return 13
+
+    mapped = ENUM_TO_PYLUACH_MONTH.get(month)
+    if mapped is None:
+        raise ValueError("Неизвестный еврейский месяц.")
+    return mapped
+
+
+def validate_hebrew_date(day: int, month: HebrewMonth, year: int | None) -> None:
+    if day <= 0:
+        raise ValueError("День должен быть положительным числом.")
+
+    if year is not None and year <= 0:
+        raise ValueError("Год должен быть положительным числом.")
+
+    if year is None:
+        return
+
+    pyluach_month = map_enum_month_to_pyluach(month, year)
+    try:
+        pyluach_dates.HebrewDate(year, pyluach_month, day)
+    except ValueError:
+        raise ValueError("Такой еврейской даты не существует.")
 
 
 def convert_gregorian_to_hebrew(day: int, month: int, year: int) -> HebrewDateConversionResult:
