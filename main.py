@@ -41,40 +41,48 @@ async def send_scheduled_notifications():
                 total_found,
             )
 
-            for days_before, birthdays in birthdays_by_days.items():
-                if not birthdays:
+            for days_before, birthday_items in birthdays_by_days.items():
+                if not birthday_items:
                     continue
 
-                for birthday in birthdays:
-                    if was_sent(session, user.id, birthday.id, today, days_before):
+                unsent_items = []
+                for birthday, birthday_date in birthday_items:
+                    if was_sent(session, user.id, birthday_date.id, today, days_before):
                         logging.info(
-                            "Уведомление уже отправлялось сегодня. user_id=%s birthday_id=%s days_before=%s",
+                            "Уведомление уже отправлялось сегодня. user_id=%s birthday_date_id=%s days_before=%s",
                             user.id,
-                            birthday.id,
+                            birthday_date.id,
                             days_before,
                         )
                         continue
 
-                    message_text = build_notification_message([birthday], days_before)
+                    unsent_items.append((birthday, birthday_date))
 
-                    if not message_text:
-                        continue
+                if not unsent_items:
+                    continue
 
-                    try:
-                        await bot.send_message(chat_id=user.telegram_id, text=message_text)
-                        mark_as_sent(session, user.id, birthday.id, today, days_before)
-                        logging.info(
-                            "Уведомление отправлено пользователю %s для birthday_id=%s days_before=%s",
-                            user.telegram_id,
-                            birthday.id,
-                            days_before,
-                        )
-                    except Exception as e:
-                        logging.exception(
-                            "Не удалось отправить уведомление пользователю %s: %s",
-                            user.telegram_id,
-                            e,
-                        )
+                message_text = build_notification_message(unsent_items, days_before)
+                if not message_text:
+                    continue
+
+                try:
+                    await bot.send_message(chat_id=user.telegram_id, text=message_text)
+
+                    for _, birthday_date in unsent_items:
+                        mark_as_sent(session, user.id, birthday_date.id, today, days_before)
+
+                    logging.info(
+                        "Уведомление отправлено пользователю %s. count=%s days_before=%s",
+                        user.telegram_id,
+                        len(unsent_items),
+                        days_before,
+                    )
+                except Exception as e:
+                    logging.exception(
+                        "Не удалось отправить уведомление пользователю %s: %s",
+                        user.telegram_id,
+                        e,
+                    )
 
 
 def setup_scheduler() -> AsyncIOScheduler:

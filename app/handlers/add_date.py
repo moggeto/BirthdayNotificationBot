@@ -8,27 +8,35 @@ from app.services.birthdays import create_birthday
 from app.services.users import get_or_create_user
 from app.states.birthday_states import BirthdayStates
 from app.services.validators import parse_date_with_optional_year
-from app.services.birthdays import create_birthday_with_gregorian
+from sqlalchemy.orm import selectinload
+from app.database.models import Birthday
+from app.services.date_formatting import format_full
 
 
 async def start_adding_birthday(message: types.Message, state: FSMContext):
-    await message.answer("Пожалуйста, введите имя и фамилию:", reply_markup=cancel_menu)
+    await state.clear()
+    await message.answer(
+        "Введите имя и фамилию:",
+        reply_markup=cancel_menu,
+    )
     await state.set_state(BirthdayStates.waiting_for_name)
 
 
 async def process_name(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
+    text = (message.text or "").strip()
+
+    if text == "Назад":
         await cancel_operation(message, state)
         return
 
-    if not message.text or not message.text.strip():
+    if not text:
         await message.answer("Имя не может быть пустым. Введите имя ещё раз.")
         return
 
-    await state.update_data(name=message.text.strip())
+    await state.update_data(name=text)
     await message.answer(
         "Теперь введите дату рождения.\n"
-        "Формат:\n"
+        "Форматы:\n"
         "ДД.ММ — если без года\n"
         "ДД.ММ.ГГГГ — если с годом",
         reply_markup=cancel_menu,
@@ -37,60 +45,66 @@ async def process_name(message: types.Message, state: FSMContext):
 
 
 async def process_date(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
+    text = (message.text or "").strip()
+
+    if text == "Назад":
         await cancel_operation(message, state)
         return
 
     try:
-        day, month, year = parse_date_with_optional_year(message.text)
-
-        await state.update_data(day=day, month=month, year=year)
-        await message.answer(
-            "Теперь введите описание или заметку (опционально).\n"
-            "Например: что любит, идеи для подарка и т.д.\n"
-            "Если не нужно — отправьте '-'",
-            reply_markup=cancel_menu,
-        )
-        await state.set_state(BirthdayStates.waiting_for_description)
-
+        day, month, year = parse_date_with_optional_year(text)
     except ValueError as e:
         await message.answer(str(e))
+        return
+
+    await state.update_data(day=day, month=month, year=year)
+    await message.answer(
+        "Теперь введите описание или заметку.\n"
+        "Например: что любит, идеи для подарка и т.д.\n"
+        "Если описание не нужно — отправьте '-'",
+        reply_markup=cancel_menu,
+    )
+    await state.set_state(BirthdayStates.waiting_for_description)
 
 
 async def process_description(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
+    text = (message.text or "").strip()
+
+    if text == "Назад":
         await cancel_operation(message, state)
         return
 
-    text = (message.text or "").strip()
     description = "" if text == "-" else text
-
     await state.update_data(description=description)
 
     data = await state.get_data()
-    year_info = data["year"] if data.get("year") else "не указан"
-    description_info = data["description"] if data.get("description") else "не указано"
+
+    date_text = f"{data['day']:02}.{data['month']:02}"
+    if data.get("year"):
+        date_text += f".{data['year']}"
+
+    description_text = data["description"] if data.get("description") else "не указано"
 
     await message.answer(
-        f"Проверьте данные:\n"
+        "Проверьте данные:\n"
         f"Имя и фамилия: {data['name']}\n"
-        f"Дата рождения: {data['day']:02}.{data['month']:02}\n"
-        f"Год рождения: {year_info}\n"
-        f"Описание: {description_info}",
+        f"Дата рождения: {date_text}\n"
+        f"Описание: {description_text}",
         reply_markup=confirm_menu,
     )
     await state.set_state(BirthdayStates.confirmation)
 
 
 async def confirm_birthday(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
+    text = (message.text or "").strip()
+
+    if text == "Назад":
         await cancel_operation(message, state)
         return
 
-    if message.text != "Подтвердить":
-        await message.answer("Пожалуйста, выберите одну из опций: Подтвердить или Назад.")
+    if text != "Подтвердить":
+        await message.answer("Нажмите «Подтвердить» или «Назад».")
         return
-
 
     data = await state.get_data()
 
@@ -102,7 +116,7 @@ async def confirm_birthday(message: types.Message, state: FSMContext):
                 name=message.from_user.full_name,
             )
 
-            birthday = create_birthday(
+            created_birthday = create_birthday(
                 session=session,
                 user=user,
                 full_name=data["name"],
@@ -112,11 +126,24 @@ async def confirm_birthday(message: types.Message, state: FSMContext):
                 description=data.get("description", ""),
             )
 
-        full_name = f"{birthday.first_name} {birthday.last_name}".strip()
+            birthday = (
+                session.query(Birthday)
+                .options(selectinload(Birthday.dates))
+                .filter(Birthday.id == created_birthday.id)
+                .first()
+            )
+
+            if not birthday:
+                raise ValueError("Не удалось загрузить созданную запись.")
+
+            full_name = f"{birthday.first_name} {birthday.last_name}".strip()
+            date_text = format_full(birthday, user.date_display_format)
+
         await message.answer(
-            f"День рождения {full_name} успешно добавлен!",
+            f"Добавлено:\n{full_name}\nДата: {date_text}",
             reply_markup=main_menu,
         )
+
         await state.clear()
 
     except ValueError as e:
@@ -125,15 +152,19 @@ async def confirm_birthday(message: types.Message, state: FSMContext):
         await message.answer("Такая запись уже существует.")
     except Exception as e:
         await message.answer(f"Ошибка при добавлении: {e}")
-
-
 async def cancel_operation(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("Операция отменена. Возвращаю вас в главное меню.", reply_markup=main_menu)
+    await message.answer(
+        "Операция отменена. Возвращаю в главное меню.",
+        reply_markup=main_menu,
+    )
 
 
 def register_add_handlers(dp: Dispatcher):
-    dp.message.register(start_adding_birthday, lambda message: message.text == "Добавить день рождения")
+    dp.message.register(
+        start_adding_birthday,
+        lambda message: message.text == "Добавить день рождения",
+    )
     dp.message.register(process_name, BirthdayStates.waiting_for_name)
     dp.message.register(process_date, BirthdayStates.waiting_for_date)
     dp.message.register(process_description, BirthdayStates.waiting_for_description)

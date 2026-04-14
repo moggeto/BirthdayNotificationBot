@@ -1,18 +1,20 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+from app.services.date_formatting import format_full
 
-def get_birthdays_for_edit_keyboard(birthdays: list) -> InlineKeyboardMarkup:
+
+def format_birthday_button_text(birthday, display_format) -> str:
+    full_name = f"{birthday.first_name} {birthday.last_name}".strip()
+    return f"{full_name} — {format_full(birthday, display_format)}"
+
+
+def get_birthdays_for_edit_keyboard(birthdays: list, display_format) -> InlineKeyboardMarkup:
     buttons = []
 
     for birthday in birthdays:
-        full_name = f"{birthday.first_name} {birthday.last_name}".strip()
-        text = f"{full_name} — {birthday.day:02}.{birthday.month:02}"
-        if birthday.year:
-            text += f".{birthday.year}"
-
         buttons.append([
             InlineKeyboardButton(
-                text=text,
+                text=format_birthday_button_text(birthday, display_format),
                 callback_data=f"edit_birthday_select:{birthday.id}",
             )
         ])

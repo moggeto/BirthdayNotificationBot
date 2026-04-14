@@ -1,6 +1,8 @@
+import enum
+
 from sqlalchemy import Column, Integer, String, ForeignKey, Enum, UniqueConstraint, Date
 from sqlalchemy.orm import declarative_base, relationship
-import enum
+
 
 Base = declarative_base()
 
@@ -27,12 +29,28 @@ class HebrewMonth(str, enum.Enum):
     elul = "elul"
 
 
+class AdarRule(str, enum.Enum):
+    regular_to_adar_ii = "regular_to_adar_ii"
+    regular_to_adar_i = "regular_to_adar_i"
+
+
+class DateDisplayFormat(str, enum.Enum):
+    gregorian = "gregorian"
+    hebrew = "hebrew"
+    both = "both"
+
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False)
     name = Column(String, nullable=False)
+    date_display_format = Column(
+        Enum(DateDisplayFormat),
+        nullable=False,
+        default=DateDisplayFormat.gregorian,
+    )
 
     birthdays = relationship("Birthday", back_populates="user", cascade="all, delete-orphan")
     notification_settings = relationship("NotificationSetting", back_populates="user", cascade="all, delete-orphan")
@@ -44,20 +62,16 @@ class Birthday(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # тип даты
-    calendar_type = Column(String, nullable=False, default="gregorian")
-
-    # еврейская дата
-    hebrew_day = Column(Integer, nullable=True)
-    hebrew_month = Column(Enum(HebrewMonth), nullable=True)
-    hebrew_year = Column(Integer, nullable=True)
-
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False, default="")
     description = Column(String, nullable=False, default="")
 
     user = relationship("User", back_populates="birthdays")
     dates = relationship("BirthdayDate", back_populates="birthday", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "first_name", "last_name", name="uq_user_person"),
+    )
 
 
 class BirthdayDate(Base):
@@ -77,6 +91,11 @@ class BirthdayDate(Base):
     h_day = Column(Integer, nullable=True)
     h_month = Column(Enum(HebrewMonth), nullable=True)
     h_year = Column(Integer, nullable=True)
+    adar_rule = Column(
+        Enum(AdarRule),
+        nullable=True,
+        default=AdarRule.regular_to_adar_ii,
+    )
 
     birthday = relationship("Birthday", back_populates="dates")
 

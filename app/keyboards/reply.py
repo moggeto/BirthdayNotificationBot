@@ -29,6 +29,7 @@ cancel_menu = ReplyKeyboardMarkup(
 settings_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Уведомления")],
+        [KeyboardButton(text="Формат отображения дат")],
         [KeyboardButton(text="В главное меню")],
     ],
     resize_keyboard=True,
@@ -36,6 +37,17 @@ settings_menu = ReplyKeyboardMarkup(
 
 notifications_settings_menu = ReplyKeyboardMarkup(
     keyboard=[
+        [KeyboardButton(text="Назад")],
+        [KeyboardButton(text="В главное меню")],
+    ],
+    resize_keyboard=True,
+)
+
+date_display_settings_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Только григорианская")],
+        [KeyboardButton(text="Только еврейская")],
+        [KeyboardButton(text="Обе даты")],
         [KeyboardButton(text="Назад")],
         [KeyboardButton(text="В главное меню")],
     ],

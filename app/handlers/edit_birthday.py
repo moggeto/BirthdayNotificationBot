@@ -23,15 +23,18 @@ from app.services.birthday_management import (
 from app.services.users import get_or_create_user
 from app.states.edit_birthday_states import EditBirthdayStates
 from app.services.validators import validate_day_month
+from app.services.date_formatting import format_full
 
 
-def format_birthday_line(birthday) -> str:
+def format_birthday_line(birthday, display_format):
     full_name = f"{birthday.first_name} {birthday.last_name}".strip()
-    text = f"{full_name} — {birthday.day:02}.{birthday.month:02}"
-    if birthday.year:
-        text += f".{birthday.year}"
+    date_text = format_full(birthday, display_format)
+
+    text = f"{full_name} — {date_text}"
+
     if birthday.description:
         text += f"\nОписание: {birthday.description}"
+
     return text
 
 
@@ -43,6 +46,7 @@ async def start_edit_birthday(message: types.Message):
             name=message.from_user.full_name,
         )
         birthdays = get_birthdays_for_management(session, user)
+        display_format = user.date_display_format
 
     if not birthdays:
         await message.answer("У тебя нет записей для редактирования.")
@@ -50,7 +54,7 @@ async def start_edit_birthday(message: types.Message):
 
     await message.answer(
         "Выбери день рождения:",
-        reply_markup=get_birthdays_for_edit_keyboard(birthdays),
+        reply_markup=get_birthdays_for_edit_keyboard(birthdays, display_format),
     )
 
 
@@ -68,13 +72,14 @@ async def select_birthday_for_action(callback: CallbackQuery):
             name=callback.from_user.full_name,
         )
         birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+        display_format = user.date_display_format
 
     if not birthday:
         await callback.answer("Запись не найдена.")
         return
 
     await callback.message.edit_text(
-        f"Что сделать с записью?\n{format_birthday_line(birthday)}",
+        f"Что сделать с записью?\n{format_birthday_line(birthday, display_format)}",
         reply_markup=get_birthday_actions_keyboard(birthday.id),
     )
     await callback.answer()
@@ -94,13 +99,14 @@ async def choose_edit_action(callback: CallbackQuery):
             name=callback.from_user.full_name,
         )
         birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+        display_format = user.date_display_format
 
     if not birthday:
         await callback.answer("Запись не найдена.")
         return
 
     await callback.message.edit_text(
-        f"Что именно изменить?\n{format_birthday_line(birthday)}",
+        f"Что именно изменить?\n{format_birthday_line(birthday, display_format)}",
         reply_markup=get_edit_fields_keyboard(birthday.id),
     )
     await callback.answer()
@@ -120,13 +126,14 @@ async def choose_delete_action(callback: CallbackQuery):
             name=callback.from_user.full_name,
         )
         birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+        display_format = user.date_display_format
 
     if not birthday:
         await callback.answer("Запись не найдена.")
         return
 
     await callback.message.edit_text(
-        f"Удалить запись?\n{format_birthday_line(birthday)}",
+        f"Удалить запись?\n{format_birthday_line(birthday, display_format)}",
         reply_markup=get_delete_confirmation_keyboard(birthday.id),
     )
     await callback.answer()
@@ -224,6 +231,7 @@ async def process_new_name(message: types.Message, state: FSMContext):
                 name=message.from_user.full_name,
             )
             birthday = update_birthday_name(session, user, birthday_id, message.text)
+            display_format = user.date_display_format
 
         if not birthday:
             await message.answer("Запись не найдена.", reply_markup=main_menu)
@@ -231,7 +239,7 @@ async def process_new_name(message: types.Message, state: FSMContext):
             return
 
         await message.answer(
-            f"Имя обновлено:\n{format_birthday_line(birthday)}",
+            f"Имя обновлено:\n{format_birthday_line(birthday, display_format)}",
             reply_markup=main_menu,
         )
         await state.clear()
@@ -269,6 +277,7 @@ async def process_new_date(message: types.Message, state: FSMContext):
                 name=message.from_user.full_name,
             )
             birthday = update_birthday_date(session, user, birthday_id, day, month)
+            display_format = user.date_display_format
 
         if not birthday:
             await message.answer("Запись не найдена.", reply_markup=main_menu)
@@ -276,7 +285,7 @@ async def process_new_date(message: types.Message, state: FSMContext):
             return
 
         await message.answer(
-            f"Дата обновлена:\n{format_birthday_line(birthday)}",
+            f"Дата обновлена:\n{format_birthday_line(birthday, display_format)}",
             reply_markup=main_menu,
         )
         await state.clear()
@@ -313,6 +322,7 @@ async def process_new_year(message: types.Message, state: FSMContext):
                 name=message.from_user.full_name,
             )
             birthday = update_birthday_year(session, user, birthday_id, year)
+            display_format = user.date_display_format
 
         if not birthday:
             await message.answer("Запись не найдена.", reply_markup=main_menu)
@@ -320,7 +330,7 @@ async def process_new_year(message: types.Message, state: FSMContext):
             return
 
         await message.answer(
-            f"Год обновлён:\n{format_birthday_line(birthday)}",
+            f"Год обновлён:\n{format_birthday_line(birthday, display_format)}",
             reply_markup=main_menu,
         )
         await state.clear()
@@ -356,6 +366,7 @@ async def process_new_description(message: types.Message, state: FSMContext):
                 name=message.from_user.full_name,
             )
             birthday = update_birthday_description(session, user, birthday_id, description)
+            display_format = user.date_display_format
 
         if not birthday:
             await message.answer("Запись не найдена.", reply_markup=main_menu)
@@ -363,7 +374,7 @@ async def process_new_description(message: types.Message, state: FSMContext):
             return
 
         await message.answer(
-            f"Описание обновлено:\n{format_birthday_line(birthday)}",
+            f"Описание обновлено:\n{format_birthday_line(birthday, display_format)}",
             reply_markup=main_menu,
         )
         await state.clear()
@@ -385,15 +396,17 @@ async def confirm_delete_birthday(callback: CallbackQuery):
             telegram_id=callback.from_user.id,
             name=callback.from_user.full_name,
         )
-        deleted_birthday = delete_birthday_by_id(session, user, birthday_id)
+        birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+        display_format = user.date_display_format
 
-    if not deleted_birthday:
-        await callback.answer("Запись уже удалена или не найдена.")
-        return
+        if not birthday:
+            await callback.answer("Запись уже удалена или не найдена.")
+            return
 
-    await callback.message.edit_text(
-        f"Удалено:\n{format_birthday_line(deleted_birthday)}"
-    )
+        deleted_text = format_birthday_line(birthday, display_format)
+        delete_birthday_by_id(session, user, birthday_id)
+
+    await callback.message.edit_text(f"Удалено:\n{deleted_text}")
     await callback.answer("Запись удалена.")
 
 
@@ -411,13 +424,14 @@ async def back_to_actions(callback: CallbackQuery):
             name=callback.from_user.full_name,
         )
         birthday = get_birthday_by_id_for_user(session, user, birthday_id)
+        display_format = user.date_display_format
 
     if not birthday:
         await callback.answer("Запись не найдена.")
         return
 
     await callback.message.edit_text(
-        f"Что сделать с записью?\n{format_birthday_line(birthday)}",
+        f"Что сделать с записью?\n{format_birthday_line(birthday, display_format)}",
         reply_markup=get_birthday_actions_keyboard(birthday.id),
     )
     await callback.answer()
