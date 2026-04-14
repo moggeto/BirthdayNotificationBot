@@ -50,6 +50,8 @@ def get_upcoming_birthdays_for_user(
     result: dict[int, list[Birthday]] = {days: [] for days in notify_days}
 
     for birthday in birthdays:
+        if birthday.calendar_type != "gregorian":
+            continue
         next_birthday = get_next_birthday_date(birthday, today)
         if next_birthday is None:
             continue

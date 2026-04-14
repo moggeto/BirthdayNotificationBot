@@ -7,7 +7,8 @@ from app.keyboards.reply import main_menu, confirm_menu, cancel_menu
 from app.services.birthdays import create_birthday
 from app.services.users import get_or_create_user
 from app.states.birthday_states import BirthdayStates
-from app.services.validators import validate_day_month
+from app.services.validators import parse_date_with_optional_year
+from app.services.birthdays import create_birthday_with_gregorian
 
 
 async def start_adding_birthday(message: types.Message, state: FSMContext):
@@ -25,7 +26,13 @@ async def process_name(message: types.Message, state: FSMContext):
         return
 
     await state.update_data(name=message.text.strip())
-    await message.answer("Теперь введите дату рождения в формате ДД.ММ:", reply_markup=cancel_menu)
+    await message.answer(
+        "Теперь введите дату рождения.\n"
+        "Формат:\n"
+        "ДД.ММ — если без года\n"
+        "ДД.ММ.ГГГГ — если с годом",
+        reply_markup=cancel_menu,
+    )
     await state.set_state(BirthdayStates.waiting_for_date)
 
 
@@ -35,44 +42,19 @@ async def process_date(message: types.Message, state: FSMContext):
         return
 
     try:
-        day, month = map(int, message.text.split("."))
+        day, month, year = parse_date_with_optional_year(message.text)
 
-        validate_day_month(day, month)
-
-        await state.update_data(day=day, month=month)
+        await state.update_data(day=day, month=month, year=year)
         await message.answer(
-            "Введите год рождения (опционально). Если не хотите указывать — отправьте любой текст, например '-'",
+            "Теперь введите описание или заметку (опционально).\n"
+            "Например: что любит, идеи для подарка и т.д.\n"
+            "Если не нужно — отправьте '-'",
             reply_markup=cancel_menu,
         )
-        await state.set_state(BirthdayStates.waiting_for_year)
+        await state.set_state(BirthdayStates.waiting_for_description)
 
-    except ValueError:
-        await message.answer("Неверный формат даты. Введите ещё раз в формате ДД.ММ.")
-
-
-async def process_year(message: types.Message, state: FSMContext):
-    if message.text == "Назад":
-        await cancel_operation(message, state)
-        return
-
-    text = (message.text or "").strip()
-
-    if text.isdigit():
-        year = int(text)
-        if year <= 0:
-            await message.answer("Год должен быть положительным числом. Введите год ещё раз или пропустите шаг.")
-            return
-        await state.update_data(year=year)
-    else:
-        await state.update_data(year=None)
-
-    await message.answer(
-        "Теперь введите описание или заметку (опционально).\n"
-        "Например: что любит, идеи для подарка и т.д.\n"
-        "Если не нужно — отправьте '-'",
-        reply_markup=cancel_menu,
-    )
-    await state.set_state(BirthdayStates.waiting_for_description)
+    except ValueError as e:
+        await message.answer(str(e))
 
 
 async def process_description(message: types.Message, state: FSMContext):
@@ -108,6 +90,7 @@ async def confirm_birthday(message: types.Message, state: FSMContext):
     if message.text != "Подтвердить":
         await message.answer("Пожалуйста, выберите одну из опций: Подтвердить или Назад.")
         return
+
 
     data = await state.get_data()
 
@@ -153,6 +136,5 @@ def register_add_handlers(dp: Dispatcher):
     dp.message.register(start_adding_birthday, lambda message: message.text == "Добавить день рождения")
     dp.message.register(process_name, BirthdayStates.waiting_for_name)
     dp.message.register(process_date, BirthdayStates.waiting_for_date)
-    dp.message.register(process_year, BirthdayStates.waiting_for_year)
     dp.message.register(process_description, BirthdayStates.waiting_for_description)
     dp.message.register(confirm_birthday, BirthdayStates.confirmation)

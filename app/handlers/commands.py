@@ -19,6 +19,20 @@ async def start_command(message: types.Message):
         reply_markup=main_menu,
     )
 
+async def info_command(message: types.Message):
+    await message.answer(
+        "Этот бот помогает не забывать о днях рождения.\n\n"
+        "Что он умеет:\n"
+        "- Добавлять дни рождения\n"
+        "- Хранить имя, дату, год (опционально)\n"
+        "- Добавлять заметки (например идеи подарков)\n"
+        "- Напоминать заранее (за несколько дней)\n"
+        "- Поддерживать несколько уведомлений (например за 7 и за 1 день)\n\n"
+        "Основные команды:\n"
+        "/start — открыть меню\n"
+        "/info — информация о боте"
+    )
 
 def register_command_handlers(dp: Dispatcher):
     dp.message.register(start_command, Command("start"))
+    dp.message.register(info_command, Command("info"))
