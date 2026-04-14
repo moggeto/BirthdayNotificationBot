@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date
 
 from pyluach import dates as pyluach_dates
 
@@ -111,3 +112,37 @@ def convert_gregorian_to_hebrew(day: int, month: int, year: int) -> HebrewDateCo
         year=hebrew_date.year,
         adar_rule=AdarRule.regular_to_adar_ii,
     )
+
+
+def get_next_gregorian_for_hebrew(
+    h_day: int,
+    h_month: HebrewMonth,
+    h_year: int | None,
+    today: date,
+) -> date:
+    """
+    Возвращает ближайшую григорианскую дату наступления еврейской даты,
+    начиная от today.
+
+    h_year не используется как ограничение для поиска следующего наступления,
+    он хранится только как исходный год рождения.
+    """
+    current_hebrew = pyluach_dates.GregorianDate(
+        today.year,
+        today.month,
+        today.day,
+    ).to_heb()
+
+    # Проверяем текущий и следующий еврейский год
+    for hebrew_year in (current_hebrew.year, current_hebrew.year + 1):
+        try:
+            pyluach_month = map_enum_month_to_pyluach(h_month, hebrew_year)
+            candidate = pyluach_dates.HebrewDate(hebrew_year, pyluach_month, h_day).to_greg()
+            candidate_date = date(candidate.year, candidate.month, candidate.day)
+
+            if candidate_date >= today:
+                return candidate_date
+        except ValueError:
+            continue
+
+    raise ValueError("Не удалось вычислить ближайшую григорианскую дату для еврейского дня рождения.")

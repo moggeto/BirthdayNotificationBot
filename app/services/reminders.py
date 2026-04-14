@@ -2,7 +2,15 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from sqlalchemy.orm import selectinload
 
-from app.database.models import Birthday, BirthdayDate, CalendarType, User
+from app.database.models import (
+    Birthday,
+    BirthdayDate,
+    CalendarType,
+    NotificationCalendarMode,
+    User,
+)
+from app.services.birthdays import get_date_by_type
+from app.services.hebrew_dates import get_next_gregorian_for_hebrew
 from app.services.notifications import get_notification_days_list
 
 
@@ -31,19 +39,31 @@ def get_next_gregorian_occurrence(birthday_date: BirthdayDate, today: date) -> d
     return build_gregorian_date_for_year(birthday_date, today.year + 1)
 
 
-def get_gregorian_date(birthday: Birthday) -> BirthdayDate | None:
-    for item in birthday.dates:
-        if item.calendar_type == CalendarType.gregorian:
-            return item
-    return None
+def get_next_hebrew_occurrence(birthday_date: BirthdayDate, today: date) -> date | None:
+    if not birthday_date.h_day or not birthday_date.h_month:
+        return None
+
+    return get_next_gregorian_for_hebrew(
+        h_day=birthday_date.h_day,
+        h_month=birthday_date.h_month,
+        h_year=birthday_date.h_year,
+        today=today,
+    )
 
 
-def format_birthday_text(birthday: Birthday, birthday_date: BirthdayDate) -> str:
+def format_birthday_text(birthday: Birthday, date_item: BirthdayDate) -> str:
     full_name = f"{birthday.first_name} {birthday.last_name}".strip()
-    date_text = f"{birthday_date.g_day:02}.{birthday_date.g_month:02}"
 
-    if birthday_date.g_year:
-        return f"{full_name} — {date_text}.{birthday_date.g_year}"
+    if date_item.calendar_type == CalendarType.gregorian:
+        date_text = f"{date_item.g_day:02}.{date_item.g_month:02}"
+        if date_item.g_year:
+            date_text += f".{date_item.g_year}"
+        return f"{full_name} — {date_text}"
+
+    month_text = date_item.h_month.value if date_item.h_month else "?"
+    date_text = f"{date_item.h_day} {month_text}"
+    if date_item.h_year:
+        date_text += f" {date_item.h_year}"
     return f"{full_name} — {date_text}"
 
 
@@ -69,17 +89,39 @@ def get_upcoming_birthdays_for_user(
     }
 
     for birthday in birthdays:
-        gregorian_date = get_gregorian_date(birthday)
-        if not gregorian_date:
-            continue
+        mode = birthday.notification_calendar_mode
 
-        next_birthday = get_next_gregorian_occurrence(gregorian_date, today)
-        if next_birthday is None:
-            continue
+        date_items: list[BirthdayDate] = []
 
-        days_left = (next_birthday - today).days
-        if days_left in result:
-            result[days_left].append((birthday, gregorian_date))
+        gregorian = get_date_by_type(session, birthday.id, CalendarType.gregorian)
+        hebrew = get_date_by_type(session, birthday.id, CalendarType.hebrew)
+
+        if mode == NotificationCalendarMode.gregorian:
+            if gregorian:
+                date_items.append(gregorian)
+
+        elif mode == NotificationCalendarMode.hebrew:
+            if hebrew:
+                date_items.append(hebrew)
+
+        elif mode == NotificationCalendarMode.both:
+            if gregorian:
+                date_items.append(gregorian)
+            if hebrew:
+                date_items.append(hebrew)
+
+        for date_item in date_items:
+            if date_item.calendar_type == CalendarType.gregorian:
+                next_birthday = get_next_gregorian_occurrence(date_item, today)
+            else:
+                next_birthday = get_next_hebrew_occurrence(date_item, today)
+
+            if next_birthday is None:
+                continue
+
+            days_left = (next_birthday - today).days
+            if days_left in result:
+                result[days_left].append((birthday, date_item))
 
     return result
 
@@ -92,15 +134,15 @@ def build_notification_message(
         return ""
 
     if len(birthday_items) == 1:
-        birthday, birthday_date = birthday_items[0]
+        birthday, date_item = birthday_items[0]
         return (
             f"Напоминание: через {days_before} дн. день рождения у:\n"
-            f"{format_birthday_text(birthday, birthday_date)}"
+            f"{format_birthday_text(birthday, date_item)}"
         )
 
     lines = [f"Напоминание: через {days_before} дн. дни рождения у:"]
     lines.extend(
-        f"- {format_birthday_text(birthday, birthday_date)}"
-        for birthday, birthday_date in birthday_items
+        f"- {format_birthday_text(birthday, date_item)}"
+        for birthday, date_item in birthday_items
     )
     return "\n".join(lines)

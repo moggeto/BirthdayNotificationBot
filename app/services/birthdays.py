@@ -67,15 +67,20 @@ def create_empty_birthday_card(
     return birthday
 
 
-def get_date_by_type(birthday: Birthday, calendar_type: CalendarType) -> BirthdayDate | None:
-    for item in birthday.dates:
-        if item.calendar_type == calendar_type:
-            return item
-    return None
+def get_date_by_type(session, birthday_id: int, calendar_type: CalendarType) -> BirthdayDate | None:
+    return (
+        session.query(BirthdayDate)
+        .filter(
+            BirthdayDate.birthday_id == birthday_id,
+            BirthdayDate.calendar_type == calendar_type,
+        )
+        .first()
+    )
 
 
-def ensure_missing_date_type(birthday: Birthday, calendar_type: CalendarType) -> None:
-    if get_date_by_type(birthday, calendar_type):
+def ensure_missing_date_type(session, birthday_id: int, calendar_type: CalendarType) -> None:
+    existing = get_date_by_type(session, birthday_id, calendar_type)
+    if existing:
         raise ValueError("Дата этого типа уже существует у записи.")
 
 
@@ -88,8 +93,7 @@ def add_gregorian_date_to_birthday(
     *,
     is_derived: bool = False,
 ) -> BirthdayDate:
-    birthday = get_birthday_with_dates(session, birthday.id)
-    ensure_missing_date_type(birthday, CalendarType.gregorian)
+    ensure_missing_date_type(session, birthday.id, CalendarType.gregorian)
 
     date_item = BirthdayDate(
         birthday_id=birthday.id,
@@ -114,9 +118,8 @@ def add_hebrew_date_to_birthday(
     adar_rule: AdarRule = AdarRule.regular_to_adar_ii,
     is_derived: bool = False,
 ) -> BirthdayDate:
-    birthday = get_birthday_with_dates(session, birthday.id)
     validate_hebrew_date(day, month, year)
-    ensure_missing_date_type(birthday, CalendarType.hebrew)
+    ensure_missing_date_type(session, birthday.id, CalendarType.hebrew)
 
     date_item = BirthdayDate(
         birthday_id=birthday.id,
@@ -133,11 +136,8 @@ def add_hebrew_date_to_birthday(
 
 
 def sync_derived_hebrew_from_gregorian(session, birthday: Birthday) -> None:
-    # ВАЖНО: всегда заново читаем карточку с датами из БД/сессии
-    birthday = get_birthday_with_dates(session, birthday.id)
-
-    gregorian = get_date_by_type(birthday, CalendarType.gregorian)
-    hebrew = get_date_by_type(birthday, CalendarType.hebrew)
+    gregorian = get_date_by_type(session, birthday.id, CalendarType.gregorian)
+    hebrew = get_date_by_type(session, birthday.id, CalendarType.hebrew)
 
     if not gregorian:
         return

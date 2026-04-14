@@ -9,6 +9,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Date,
     Boolean,
+    text,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -61,14 +62,24 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False)
     name = Column(String, nullable=False)
+
     date_display_format = Column(
         Enum(DateDisplayFormat),
         nullable=False,
         default=DateDisplayFormat.gregorian,
+        server_default=DateDisplayFormat.gregorian.value,
     )
 
-    birthdays = relationship("Birthday", back_populates="user", cascade="all, delete-orphan")
-    notification_settings = relationship("NotificationSetting", back_populates="user", cascade="all, delete-orphan")
+    birthdays = relationship(
+        "Birthday",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    notification_settings = relationship(
+        "NotificationSetting",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Birthday(Base):
@@ -78,17 +89,22 @@ class Birthday(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     first_name = Column(String, nullable=False)
-    last_name = Column(String, nullable=False, default="")
-    description = Column(String, nullable=False, default="")
+    last_name = Column(String, nullable=False, default="", server_default="")
+    description = Column(String, nullable=False, default="", server_default="")
 
     notification_calendar_mode = Column(
         Enum(NotificationCalendarMode),
         nullable=False,
         default=NotificationCalendarMode.gregorian,
+        server_default=NotificationCalendarMode.gregorian.value,
     )
 
     user = relationship("User", back_populates="birthdays")
-    dates = relationship("BirthdayDate", back_populates="birthday", cascade="all, delete-orphan")
+    dates = relationship(
+        "BirthdayDate",
+        back_populates="birthday",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "first_name", "last_name", name="uq_user_person"),
@@ -101,8 +117,17 @@ class BirthdayDate(Base):
     id = Column(Integer, primary_key=True)
     birthday_id = Column(Integer, ForeignKey("birthdays.id"), nullable=False)
 
-    calendar_type = Column(Enum(CalendarType), nullable=False)
-    is_derived = Column(Boolean, nullable=False, default=False)
+    calendar_type = Column(
+        Enum(CalendarType),
+        nullable=False,
+    )
+
+    is_derived = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+    )
 
     # Gregorian
     g_day = Column(Integer, nullable=True)
@@ -118,6 +143,7 @@ class BirthdayDate(Base):
         Enum(AdarRule),
         nullable=True,
         default=AdarRule.regular_to_adar_ii,
+        server_default=AdarRule.regular_to_adar_ii.value,
     )
 
     birthday = relationship("Birthday", back_populates="dates")
